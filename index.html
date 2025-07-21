@@ -30,6 +30,24 @@
             text-align: center;
             border-radius: 10px;
             margin-bottom: 20px;
+            position: relative;
+        }
+
+        .btn-back {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+            border: 1px solid white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-back:hover {
+            background: rgba(255, 255, 255, 0.5);
         }
 
         .role-selection {
@@ -268,6 +286,7 @@
             border-radius: 8px;
             animation: slideIn 0.3s;
             max-width: 300px;
+            z-index: 1000;
         }
 
         @keyframes slideIn {
@@ -279,6 +298,35 @@
             color: #f44336;
             font-size: 14px;
             margin-top: 10px;
+        }
+
+        .sync-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+
+        .sync-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: white;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
         }
 
         .progress-indicator {
@@ -304,16 +352,13 @@
             animation: pulse 2s infinite;
         }
 
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.2); }
-            100% { transform: scale(1); }
-        }
-
         .hidden {
             display: none;
         }
     </style>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 </head>
 <body>
     <div class="container">
@@ -345,14 +390,36 @@
             <div class="header">
                 <h1>India Sales Conference</h1>
                 <div id="userInfo"></div>
+                <button id="backButton" class="btn-back" onclick="goBack()">← Back</button>
             </div>
 
             <div class="tabs" id="tabs"></div>
             <div id="content"></div>
         </div>
+
+        <!-- Sync Indicator -->
+        <div class="sync-indicator" id="syncIndicator" style="display: none;">
+            <div class="sync-dot"></div>
+            <span>Connected</span>
+        </div>
     </div>
 
     <script>
+        // Firebase configuration - YOUR CONFIG
+        const firebaseConfig = {
+            apiKey: "AIzaSyDga6voW5huU8-We223pRjh5qys60aImSw",
+            authDomain: "event-demo-tracker.firebaseapp.com",
+            databaseURL: "https://event-demo-tracker-default-rtdb.firebaseio.com",
+            projectId: "event-demo-tracker",
+            storageBucket: "event-demo-tracker.firebasestorage.app",
+            messagingSenderId: "763371181905",
+            appId: "1:763371181905:web:65f09fd0ac0ad957d8e570"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
         // Demo data
         const demos = [
             {id: 1, name: "IA (Interior Sensor)", building: "B2", location: "Garage 1"},
@@ -377,23 +444,65 @@
             "16:05-16:35", "16:40-17:10", "17:15-17:45"
         ];
 
-        let app = {
+        let appState = {
             role: null,
             group: null,
-            demoStatus: {}, // {demoId: {occupiedBy: groupId, isLate: bool, completedBy: [groupIds]}}
-            groupProgress: {} // {groupId: {currentDemo: index, completedDemos: [demoIds]}}
+            demoStatus: {},
+            groupProgress: {},
+            listeners: [] // Store Firebase listeners
         };
 
-        // Load saved data
-        const saved = localStorage.getItem('eventApp');
-        if (saved) {
-            const data = JSON.parse(saved);
-            app.demoStatus = data.demoStatus || {};
-            app.groupProgress = data.groupProgress || {};
+        // Firebase listeners setup
+        function setupFirebaseListeners() {
+            // Clear existing listeners
+            appState.listeners.forEach(listener => listener());
+            appState.listeners = [];
+
+            // Listen to demo status changes
+            const demoStatusRef = database.ref('demoStatus');
+            const demoStatusListener = demoStatusRef.on('value', (snapshot) => {
+                const data = snapshot.val() || {};
+                appState.demoStatus = data;
+                updateUI();
+            });
+            appState.listeners.push(() => demoStatusRef.off('value', demoStatusListener));
+
+            // Listen to group progress changes
+            const groupProgressRef = database.ref('groupProgress');
+            const groupProgressListener = groupProgressRef.on('value', (snapshot) => {
+                const data = snapshot.val() || {};
+                appState.groupProgress = data;
+                
+                // Initialize current group progress if not exists
+                if (appState.group && !appState.groupProgress[appState.group]) {
+                    appState.groupProgress[appState.group] = {
+                        currentDemo: 0,
+                        completedDemos: []
+                    };
+                    saveGroupProgress();
+                } else {
+                    // Update UI after loading progress
+                    updateUI();
+                }
+            });
+            appState.listeners.push(() => groupProgressRef.off('value', groupProgressListener));
+
+            // Show sync indicator
+            document.getElementById('syncIndicator').style.display = 'flex';
+        }
+
+        function updateUI() {
+            // Only update if we're in the main app
+            if (document.getElementById('mainApp').classList.contains('hidden')) return;
+            
+            const activeTab = document.querySelector('.tab.active');
+            if (activeTab) {
+                activeTab.click();
+            }
         }
 
         function setRole(role) {
-            app.role = role;
+            appState.role = role;
             if (role === 'lead') {
                 document.getElementById('roleSelect').classList.add('hidden');
                 document.getElementById('groupSelect').classList.remove('hidden');
@@ -405,14 +514,7 @@
         function confirmGroup() {
             const group = document.getElementById('groupNumber').value;
             if (group) {
-                app.group = parseInt(group);
-                // Initialize group progress if not exists
-                if (!app.groupProgress[app.group]) {
-                    app.groupProgress[app.group] = {
-                        currentDemo: 0,
-                        completedDemos: []
-                    };
-                }
+                appState.group = parseInt(group);
                 startApp();
             }
         }
@@ -423,24 +525,24 @@
             document.getElementById('mainApp').classList.remove('hidden');
 
             // Set user info
-            const userInfo = app.role === 'lead' ? 
-                `Group ${app.group} Lead` : 
-                app.role === 'admin' ? 'Admin' : 'Coordinator';
+            const userInfo = appState.role === 'lead' ? 
+                `Group ${appState.group} Lead` : 
+                appState.role === 'admin' ? 'Admin' : 'Coordinator';
             document.getElementById('userInfo').textContent = userInfo;
+
+            // Setup Firebase listeners
+            setupFirebaseListeners();
 
             // Create tabs
             createTabs();
             showTab(0);
-
-            // Update every 15 seconds
-            setInterval(updateData, 15000);
         }
 
         function createTabs() {
             const tabsDiv = document.getElementById('tabs');
-            const tabs = app.role === 'lead' ? 
+            const tabs = appState.role === 'lead' ? 
                 ['My Demos', 'Schedule'] :
-                app.role === 'admin' ?
+                appState.role === 'admin' ?
                 ['Dashboard', 'Broadcast', 'Schedule'] :
                 ['Dashboard', 'Schedule'];
 
@@ -460,10 +562,10 @@
             });
 
             // Show content
-            if (app.role === 'lead') {
+            if (appState.role === 'lead') {
                 if (index === 0) showDemos();
                 else showSchedule();
-            } else if (app.role === 'admin') {
+            } else if (appState.role === 'admin') {
                 if (index === 0) showDashboard();
                 else if (index === 1) showBroadcast();
                 else showSchedule();
@@ -478,24 +580,25 @@
             let html = '<div class="content active">';
             
             // Progress indicator
+            const currentProgress = appState.groupProgress[appState.group] || { currentDemo: 0, completedDemos: [] };
             html += '<div class="progress-indicator">';
             for (let i = 0; i < 6; i++) {
-                const isCompleted = i < app.groupProgress[app.group].currentDemo;
-                const isCurrent = i === app.groupProgress[app.group].currentDemo;
+                const isCompleted = i < currentProgress.currentDemo;
+                const isCurrent = i === currentProgress.currentDemo;
                 html += `<div class="progress-dot ${isCompleted ? 'completed' : ''} ${isCurrent ? 'current' : ''}"></div>`;
             }
             html += '</div>';
             
-            const groupDemos = schedule[app.group];
-            const currentDemoIndex = app.groupProgress[app.group].currentDemo;
+            const groupDemos = schedule[appState.group];
+            const currentDemoIndex = currentProgress.currentDemo;
             
             groupDemos.forEach((demoId, i) => {
                 const demo = demos.find(d => d.id === demoId);
-                const demoStatusInfo = app.demoStatus[demoId] || {};
-                const isCompleted = app.groupProgress[app.group].completedDemos.includes(demoId);
+                const demoStatusInfo = appState.demoStatus[demoId] || {};
+                const isCompleted = currentProgress.completedDemos.includes(demoId);
                 const isCurrent = i === currentDemoIndex;
-                const isOccupied = demoStatusInfo.occupiedBy && demoStatusInfo.occupiedBy !== app.group;
-                const isCheckedIn = demoStatusInfo.occupiedBy === app.group;
+                const isOccupied = demoStatusInfo.occupiedBy && demoStatusInfo.occupiedBy !== appState.group;
+                const isCheckedIn = demoStatusInfo.occupiedBy === appState.group;
                 const isLate = demoStatusInfo.isLate;
                 
                 let cardClass = 'demo-card';
@@ -546,7 +649,7 @@
             let html = '<div class="content active"><div class="status-grid">';
             
             demos.forEach(demo => {
-                const demoStatus = app.demoStatus[demo.id] || {};
+                const demoStatus = appState.demoStatus[demo.id] || {};
                 const occupiedBy = demoStatus.occupiedBy;
                 const isLate = demoStatus.isLate;
                 
@@ -569,7 +672,7 @@
                 // Show completed groups
                 const completedGroups = [];
                 for (let g = 1; g <= 6; g++) {
-                    if (app.groupProgress[g]?.completedDemos?.includes(demo.id)) {
+                    if (appState.groupProgress[g]?.completedDemos?.includes(demo.id)) {
                         completedGroups.push(g);
                     }
                 }
@@ -611,8 +714,8 @@
                 for (let g = 1; g <= 6; g++) {
                     const demoId = schedule[g][i];
                     const demo = demos.find(d => d.id === demoId);
-                    const isCompleted = app.groupProgress[g]?.completedDemos?.includes(demoId);
-                    const isCurrent = app.groupProgress[g]?.currentDemo === i;
+                    const isCompleted = appState.groupProgress[g]?.completedDemos?.includes(demoId);
+                    const isCurrent = appState.groupProgress[g]?.currentDemo === i;
                     
                     html += `<td>
                         <span class="building-tag ${demo.building.toLowerCase()}">${demo.building}</span> 
@@ -635,87 +738,121 @@
         }
 
         function checkIn(demoId) {
-            // Check if demo is already occupied
-            if (app.demoStatus[demoId]?.occupiedBy) {
-                notify('This demo is already occupied!', 'error');
-                return;
-            }
-            
-            // Initialize demo status if not exists
-            if (!app.demoStatus[demoId]) {
-                app.demoStatus[demoId] = {};
-            }
-            
-            // Mark as occupied by this group
-            app.demoStatus[demoId].occupiedBy = app.group;
-            app.demoStatus[demoId].isLate = false;
-            
-            saveData();
-            showDemos();
+        // Update Firebase
+        database.ref(`demoStatus/${demoId}`).set({
+            occupiedBy: appState.group,
+            isLate: false,
+            timestamp: firebase.database.ServerValue.TIMESTAMP
+        }).then(() => {
+            // ✅ FIX: Update local appState immediately
+            appState.demoStatus[demoId] = {
+                occupiedBy: appState.group,
+                isLate: false
+            };
             notify('Checked in successfully!');
+            showDemos(); // ✅ FIX: Immediately reflect change in UI
+        });
+    }
+
+    function checkOut(demoId) {
+        // Clear occupation in Firebase
+        database.ref(`demoStatus/${demoId}`).set(null);
+
+        // Update group progress
+        const currentProgress = appState.groupProgress[appState.group] || { currentDemo: 0, completedDemos: [] };
+        if (!currentProgress.completedDemos.includes(demoId)) {
+            currentProgress.completedDemos.push(demoId);
+        }
+        if (currentProgress.currentDemo < 5) {
+            currentProgress.currentDemo++;
+        }
+        
+        // Save to Firebase
+        database.ref(`groupProgress/${appState.group}`).set(currentProgress);
+
+        // ✅ FIX: Update local appState immediately
+        appState.groupProgress[appState.group] = currentProgress;
+        if (appState.demoStatus[demoId]) {
+            appState.demoStatus[demoId] = null;
         }
 
-        function checkOut(demoId) {
-            // Clear occupation
-            app.demoStatus[demoId].occupiedBy = null;
-            app.demoStatus[demoId].isLate = false;
-            
-            // Mark as completed for this group
-            if (!app.groupProgress[app.group].completedDemos.includes(demoId)) {
-                app.groupProgress[app.group].completedDemos.push(demoId);
-            }
-            
-            // Move to next demo
-            if (app.groupProgress[app.group].currentDemo < 5) {
-                app.groupProgress[app.group].currentDemo++;
-            }
-            
-            saveData();
-            showDemos();
-            notify('Checked out successfully! Moving to next demo.');
-        }
+        notify('Checked out successfully! Moving to next demo.');
+        showDemos(); // ✅ FIX: Immediate refresh
+    }
 
-        function markLate(demoId) {
-            if (app.demoStatus[demoId]) {
-                app.demoStatus[demoId].isLate = !app.demoStatus[demoId].isLate;
-                saveData();
-                showDemos();
-                notify(app.demoStatus[demoId].isLate ? 'Marked as running late' : 'Marked as on time');
+    function markLate(demoId) {
+        const currentStatus = appState.demoStatus[demoId] || {};
+        const newStatus = !currentStatus.isLate;
+
+        database.ref(`demoStatus/${demoId}/isLate`).set(newStatus).then(() => {
+            // ✅ FIX: Update local state and refresh immediately
+            if (!appState.demoStatus[demoId]) {
+                appState.demoStatus[demoId] = {};
             }
-        }
+            appState.demoStatus[demoId].isLate = newStatus;
+            notify(newStatus ? 'Marked as running late' : 'Marked as on time');
+            showDemos(); // ✅ FIX: Immediate refresh
+        });
+    }
 
         function sendBroadcast() {
             const msg = document.getElementById('broadcastMsg').value;
             if (msg) {
-                // Store broadcast in localStorage with timestamp
-                const broadcasts = JSON.parse(localStorage.getItem('broadcasts') || '[]');
-                broadcasts.push({
+                // Send broadcast to Firebase
+                database.ref('broadcasts').push({
                     message: msg,
-                    timestamp: new Date().toISOString(),
+                    timestamp: firebase.database.ServerValue.TIMESTAMP,
                     from: 'Admin'
                 });
-                localStorage.setItem('broadcasts', JSON.stringify(broadcasts));
                 
-                notify('📢 Broadcast sent: ' + msg);
                 document.getElementById('broadcastMsg').value = '';
-                
-                // Show to all users
-                setTimeout(() => {
-                    checkForBroadcasts();
-                }, 1000);
+                notify('Broadcast sent!');
             }
         }
 
-        function checkForBroadcasts() {
-            const broadcasts = JSON.parse(localStorage.getItem('broadcasts') || '[]');
-            const lastCheck = localStorage.getItem('lastBroadcastCheck') || '0';
-            const newBroadcasts = broadcasts.filter(b => new Date(b.timestamp) > new Date(lastCheck));
+        // Listen for broadcasts
+        function setupBroadcastListener() {
+            const broadcastRef = database.ref('broadcasts');
+            let isFirstLoad = true;
             
-            if (newBroadcasts.length > 0) {
-                newBroadcasts.forEach(b => {
-                    notify('📢 ' + b.message);
-                });
-                localStorage.setItem('lastBroadcastCheck', new Date().toISOString());
+            broadcastRef.orderByChild('timestamp').limitToLast(1).on('child_added', (snapshot) => {
+                const broadcast = snapshot.val();
+                // Skip initial load and only show new messages
+                if (!isFirstLoad && broadcast) {
+                    notify('📢 ' + broadcast.message);
+                }
+                isFirstLoad = false;
+            });
+        }
+
+        function saveGroupProgress() {
+            if (appState.group && appState.groupProgress[appState.group]) {
+                database.ref(`groupProgress/${appState.group}`).set(appState.groupProgress[appState.group]);
+            }
+        }
+
+        function goBack() {
+            if (confirm('Are you sure you want to go back? Any unsaved changes will be lost.')) {
+                // Remove Firebase listeners
+                appState.listeners.forEach(listener => listener());
+                appState.listeners = [];
+                
+                // Reset app state but keep the data
+                appState.role = null;
+                appState.group = null;
+                // Don't reset demoStatus and groupProgress - they should persist
+                
+                // Hide sync indicator
+                document.getElementById('syncIndicator').style.display = 'none';
+                
+                // Show role selection
+                document.getElementById('mainApp').classList.add('hidden');
+                document.getElementById('roleSelect').classList.remove('hidden');
+                document.getElementById('groupSelect').classList.add('hidden');
+                
+                // Clear tabs
+                document.getElementById('tabs').innerHTML = '';
+                document.getElementById('content').innerHTML = '';
             }
         }
 
@@ -730,28 +867,8 @@
             setTimeout(() => notif.remove(), 4000);
         }
 
-        function saveData() {
-            localStorage.setItem('eventApp', JSON.stringify({
-                demoStatus: app.demoStatus,
-                groupProgress: app.groupProgress
-            }));
-        }
-
-        function updateData() {
-            const saved = localStorage.getItem('eventApp');
-            if (saved) {
-                const data = JSON.parse(saved);
-                app.demoStatus = data.demoStatus || {};
-                app.groupProgress = data.groupProgress || {};
-            }
-            
-            // Check for new broadcasts
-            checkForBroadcasts();
-            
-            // Refresh current view
-            const activeTab = document.querySelector('.tab.active');
-            if (activeTab) activeTab.click();
-        }
+        // Initialize broadcast listener when app starts
+        setupBroadcastListener();
     </script>
 </body>
 </html>
