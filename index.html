@@ -580,7 +580,24 @@
             let html = '<div class="content active">';
             
             // Progress indicator
-            const currentProgress = appState.groupProgress[appState.group] || { currentDemo: 0, completedDemos: [] };
+            let currentProgress = appState.groupProgress[appState.group];
+
+if (!currentProgress) {
+    currentProgress = {
+        currentDemo: 0,
+        completedDemos: []
+    };
+    // Set default in local state
+    appState.groupProgress[appState.group] = currentProgress;
+
+    // Optionally push it to Firebase as well
+    database.ref(`groupProgress/${appState.group}`).set(currentProgress);
+} else {
+    // Patch missing fields
+    currentProgress.currentDemo ??= 0;
+    currentProgress.completedDemos ??= [];
+}
+
             html += '<div class="progress-indicator">';
             for (let i = 0; i < 6; i++) {
                 const isCompleted = i < currentProgress.currentDemo;
@@ -755,30 +772,45 @@
     }
 
     function checkOut(demoId) {
-        // Clear occupation in Firebase
-        database.ref(`demoStatus/${demoId}`).set(null);
+    console.log("Check-Out clicked for demoId:", demoId);
 
-        // Update group progress
-        const currentProgress = appState.groupProgress[appState.group] || { currentDemo: 0, completedDemos: [] };
-        if (!currentProgress.completedDemos.includes(demoId)) {
-            currentProgress.completedDemos.push(demoId);
-        }
-        if (currentProgress.currentDemo < 5) {
-            currentProgress.currentDemo++;
-        }
-        
-        // Save to Firebase
-        database.ref(`groupProgress/${appState.group}`).set(currentProgress);
+    // Step 1: Clear Firebase
+    database.ref(`demoStatus/${demoId}`).remove()
+        .then(() => {
+            console.log(`✅ demoStatus/${demoId} removed from Firebase`);
 
-        // ✅ FIX: Update local appState immediately
-        appState.groupProgress[appState.group] = currentProgress;
-        if (appState.demoStatus[demoId]) {
-            appState.demoStatus[demoId] = null;
-        }
+            // Step 2: Safely get current progress
+            let currentProgress = appState.groupProgress[appState.group];
+            if (!currentProgress) {
+                currentProgress = { currentDemo: 0, completedDemos: [] };
+            } else {
+                currentProgress.currentDemo ??= 0;
+                currentProgress.completedDemos ??= [];
+            }
 
-        notify('Checked out successfully! Moving to next demo.');
-        showDemos(); // ✅ FIX: Immediate refresh
-    }
+            // Step 3: Update group progress
+            if (!currentProgress.completedDemos.includes(demoId)) {
+                currentProgress.completedDemos.push(demoId);
+            }
+            if (currentProgress.currentDemo < 5) {
+                currentProgress.currentDemo++;
+            }
+
+            // Step 4: Save to Firebase
+            return database.ref(`groupProgress/${appState.group}`).set(currentProgress)
+                .then(() => {
+                    appState.groupProgress[appState.group] = currentProgress;
+                    delete appState.demoStatus[demoId]; // Clean up local state
+
+                    notify('Checked out successfully! Moving to next demo.');
+                    showDemos();
+                });
+        })
+        .catch((error) => {
+            console.error("❌ Check-Out failed:", error);
+            notify("❌ Check-Out failed: " + error.message, 'error');
+        });
+}
 
     function markLate(demoId) {
         const currentStatus = appState.demoStatus[demoId] || {};
