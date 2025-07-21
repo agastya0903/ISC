@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Demo Tracker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .role-selection {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-green {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-blue {
+            background: #2196F3;
+            color: white;
+        }
+
+        .btn-orange {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-red {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-yellow {
+            background: #FFC107;
+            color: #333;
+        }
+
+        .btn:hover:not(:disabled) {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        select {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .tabs {
+            display: flex;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            border: none;
+            background: white;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .content {
+            display: none;
+        }
+
+        .content.active {
+            display: block;
+        }
+
+        .demo-card {
+            background: white;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            border-left: 5px solid #ddd;
+        }
+
+        .demo-card.active {
+            border-left-color: #4CAF50;
+            background: #f0f8ff;
+        }
+
+        .demo-card.completed {
+            border-left-color: #2196F3;
+            opacity: 0.8;
+        }
+
+        .demo-card.late {
+            border-left-color: #ff9800;
+            background: #fff8e0;
+        }
+
+        .demo-card.occupied {
+            border-left-color: #f44336;
+            background: #ffebee;
+        }
+
+        .demo-info {
+            margin-bottom: 10px;
+        }
+
+        .demo-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .building-tag {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 5px;
+        }
+
+        .b1 {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .b2 {
+            background: #ffebee;
+            color: #d32f2f;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .status-completed {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .status-late {
+            background: #fff3e0;
+            color: #ff9800;
+        }
+
+        .status-occupied {
+            background: #ffebee;
+            color: #f44336;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .button-group .btn {
+            flex: 1;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .status-card {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .schedule-table {
+            width: 100%;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #333;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            animation: slideIn 0.3s;
+            max-width: 300px;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+
+        .error-msg {
+            color: #f44336;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .progress-indicator {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            justify-content: center;
+        }
+
+        .progress-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ddd;
+        }
+
+        .progress-dot.completed {
+            background: #4CAF50;
+        }
+
+        .progress-dot.current {
+            background: #2196F3;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Role Selection -->
+        <div id="roleSelect" class="role-selection">
+            <h2>Select Your Role</h2>
+            <button class="btn btn-green" onclick="setRole('lead')">Group Lead</button>
+            <button class="btn btn-blue" onclick="setRole('coordinator')">Coordinator</button>
+            <button class="btn btn-orange" onclick="setRole('admin')">Admin</button>
+        </div>
+
+        <!-- Group Selection -->
+        <div id="groupSelect" class="role-selection hidden">
+            <h2>Select Your Group</h2>
+            <select id="groupNumber">
+                <option value="">Choose group...</option>
+                <option value="1">Group 1</option>
+                <option value="2">Group 2</option>
+                <option value="3">Group 3</option>
+                <option value="4">Group 4</option>
+                <option value="5">Group 5</option>
+                <option value="6">Group 6</option>
+            </select>
+            <button class="btn btn-green" onclick="confirmGroup()">Continue</button>
+        </div>
+
+        <!-- Main App -->
+        <div id="mainApp" class="hidden">
+            <div class="header">
+                <h1>India Sales Conference</h1>
+                <div id="userInfo"></div>
+            </div>
+
+            <div class="tabs" id="tabs"></div>
+            <div id="content"></div>
+        </div>
+    </div>
+
+    <script>
+        // Demo data
+        const demos = [
+            {id: 1, name: "IA (Interior Sensor)", building: "B2", location: "Garage 1"},
+            {id: 2, name: "CL", building: "B1", location: "4th Floor"},
+            {id: 3, name: "CS + DE", building: "B2", location: "Amphitheatre (1st)"},
+            {id: 4, name: "SI", building: "B1", location: "Atrium (Ground)"},
+            {id: 5, name: "GL", building: "B1", location: "6th Floor"},
+            {id: 6, name: "PP", building: "B2", location: "Garage 2"}
+        ];
+
+        const schedule = {
+            1: [4, 2, 5, 1, 6, 3],
+            2: [5, 4, 2, 6, 3, 1],
+            3: [2, 5, 4, 3, 1, 6],
+            4: [1, 3, 6, 4, 2, 5],
+            5: [6, 1, 3, 2, 5, 4],
+            6: [3, 6, 1, 5, 4, 2]
+        };
+
+        const timeSlots = [
+            "14:15-14:45", "14:50-15:20", "15:25-15:55",
+            "16:05-16:35", "16:40-17:10", "17:15-17:45"
+        ];
+
+        let app = {
+            role: null,
+            group: null,
+            demoStatus: {}, // {demoId: {occupiedBy: groupId, isLate: bool, completedBy: [groupIds]}}
+            groupProgress: {} // {groupId: {currentDemo: index, completedDemos: [demoIds]}}
+        };
+
+        // Load saved data
+        const saved = localStorage.getItem('eventApp');
+        if (saved) {
+            const data = JSON.parse(saved);
+            app.demoStatus = data.demoStatus || {};
+            app.groupProgress = data.groupProgress || {};
+        }
+
+        function setRole(role) {
+            app.role = role;
+            if (role === 'lead') {
+                document.getElementById('roleSelect').classList.add('hidden');
+                document.getElementById('groupSelect').classList.remove('hidden');
+            } else {
+                startApp();
+            }
+        }
+
+        function confirmGroup() {
+            const group = document.getElementById('groupNumber').value;
+            if (group) {
+                app.group = parseInt(group);
+                // Initialize group progress if not exists
+                if (!app.groupProgress[app.group]) {
+                    app.groupProgress[app.group] = {
+                        currentDemo: 0,
+                        completedDemos: []
+                    };
+                }
+                startApp();
+            }
+        }
+
+        function startApp() {
+            document.getElementById('roleSelect').classList.add('hidden');
+            document.getElementById('groupSelect').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+
+            // Set user info
+            const userInfo = app.role === 'lead' ? 
+                `Group ${app.group} Lead` : 
+                app.role === 'admin' ? 'Admin' : 'Coordinator';
+            document.getElementById('userInfo').textContent = userInfo;
+
+            // Create tabs
+            createTabs();
+            showTab(0);
+
+            // Update every 15 seconds
+            setInterval(updateData, 15000);
+        }
+
+        function createTabs() {
+            const tabsDiv = document.getElementById('tabs');
+            const tabs = app.role === 'lead' ? 
+                ['My Demos', 'Schedule'] :
+                app.role === 'admin' ?
+                ['Dashboard', 'Broadcast', 'Schedule'] :
+                ['Dashboard', 'Schedule'];
+
+            tabs.forEach((tab, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'tab';
+                btn.textContent = tab;
+                btn.onclick = () => showTab(i);
+                tabsDiv.appendChild(btn);
+            });
+        }
+
+        function showTab(index) {
+            // Update active tab
+            document.querySelectorAll('.tab').forEach((tab, i) => {
+                tab.classList.toggle('active', i === index);
+            });
+
+            // Show content
+            if (app.role === 'lead') {
+                if (index === 0) showDemos();
+                else showSchedule();
+            } else if (app.role === 'admin') {
+                if (index === 0) showDashboard();
+                else if (index === 1) showBroadcast();
+                else showSchedule();
+            } else {
+                if (index === 0) showDashboard();
+                else showSchedule();
+            }
+        }
+
+        function showDemos() {
+            const contentDiv = document.getElementById('content');
+            let html = '<div class="content active">';
+            
+            // Progress indicator
+            html += '<div class="progress-indicator">';
+            for (let i = 0; i < 6; i++) {
+                const isCompleted = i < app.groupProgress[app.group].currentDemo;
+                const isCurrent = i === app.groupProgress[app.group].currentDemo;
+                html += `<div class="progress-dot ${isCompleted ? 'completed' : ''} ${isCurrent ? 'current' : ''}"></div>`;
+            }
+            html += '</div>';
+            
+            const groupDemos = schedule[app.group];
+            const currentDemoIndex = app.groupProgress[app.group].currentDemo;
+            
+            groupDemos.forEach((demoId, i) => {
+                const demo = demos.find(d => d.id === demoId);
+                const demoStatusInfo = app.demoStatus[demoId] || {};
+                const isCompleted = app.groupProgress[app.group].completedDemos.includes(demoId);
+                const isCurrent = i === currentDemoIndex;
+                const isOccupied = demoStatusInfo.occupiedBy && demoStatusInfo.occupiedBy !== app.group;
+                const isCheckedIn = demoStatusInfo.occupiedBy === app.group;
+                const isLate = demoStatusInfo.isLate;
+                
+                let cardClass = 'demo-card';
+                if (isCompleted) cardClass += ' completed';
+                else if (isCurrent && !isOccupied) cardClass += ' active';
+                else if (isOccupied) cardClass += ' occupied';
+                if (isLate && isCheckedIn) cardClass += ' late';
+                
+                html += `
+                    <div class="${cardClass}">
+                        <div class="demo-title">
+                            Demo ${demo.id}: ${demo.name}
+                            ${isCompleted ? '<span class="status-badge status-completed">Completed</span>' : ''}
+                            ${isOccupied && !isCompleted ? `<span class="status-badge status-occupied">Occupied by Group ${demoStatusInfo.occupiedBy}</span>` : ''}
+                            ${isLate && isCheckedIn ? '<span class="status-badge status-late">Running Late</span>' : ''}
+                        </div>
+                        <div class="demo-info">
+                            <span class="building-tag ${demo.building.toLowerCase()}">${demo.building}</span>
+                            ${demo.location} | ${timeSlots[i]}
+                        </div>
+                `;
+                
+                // Show buttons only for current demo
+                if (isCurrent && !isCompleted) {
+                    if (isOccupied) {
+                        html += '<div class="error-msg">This demo is currently occupied by another group</div>';
+                    } else if (isCheckedIn) {
+                        html += `
+                            <div class="button-group">
+                                <button class="btn btn-red" onclick="checkOut(${demoId})">Check Out</button>
+                                <button class="btn btn-yellow" onclick="markLate(${demoId})">${isLate ? 'Mark On Time' : 'Mark as Late'}</button>
+                            </div>
+                        `;
+                    } else {
+                        html += `<button class="btn btn-green" onclick="checkIn(${demoId})">Check In</button>`;
+                    }
+                }
+                
+                html += '</div>';
+            });
+            
+            html += '</div>';
+            contentDiv.innerHTML = html;
+        }
+
+        function showDashboard() {
+            const contentDiv = document.getElementById('content');
+            let html = '<div class="content active"><div class="status-grid">';
+            
+            demos.forEach(demo => {
+                const demoStatus = app.demoStatus[demo.id] || {};
+                const occupiedBy = demoStatus.occupiedBy;
+                const isLate = demoStatus.isLate;
+                
+                html += `
+                    <div class="status-card">
+                        <h3>Demo ${demo.id}: ${demo.name}</h3>
+                        <div><span class="building-tag ${demo.building.toLowerCase()}">${demo.building}</span> ${demo.location}</div>
+                        <div style="margin-top: 10px;">
+                `;
+                
+                if (occupiedBy) {
+                    html += `
+                        <div style="color: #4CAF50;">✓ Group ${occupiedBy}</div>
+                        ${isLate ? '<div style="color: #ff9800; font-size: 14px;">⚠ Running Late</div>' : ''}
+                    `;
+                } else {
+                    html += '<div style="color: #999;">Available</div>';
+                }
+                
+                // Show completed groups
+                const completedGroups = [];
+                for (let g = 1; g <= 6; g++) {
+                    if (app.groupProgress[g]?.completedDemos?.includes(demo.id)) {
+                        completedGroups.push(g);
+                    }
+                }
+                if (completedGroups.length > 0) {
+                    html += `<div style="font-size: 12px; color: #666; margin-top: 5px;">Completed: Groups ${completedGroups.join(', ')}</div>`;
+                }
+                
+                html += '</div></div>';
+            });
+            
+            html += '</div></div>';
+            contentDiv.innerHTML = html;
+        }
+
+        function showBroadcast() {
+            const contentDiv = document.getElementById('content');
+            contentDiv.innerHTML = `
+                <div class="content active">
+                    <div style="background: white; padding: 20px; border-radius: 10px;">
+                        <h3>Send Broadcast</h3>
+                        <input type="text" id="broadcastMsg" style="width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px;" placeholder="Type message...">
+                        <button class="btn btn-blue" onclick="sendBroadcast()">Send to All Group Leads</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function showSchedule() {
+            const contentDiv = document.getElementById('content');
+            let html = '<div class="content active"><div class="schedule-table"><table><thead><tr><th>Time</th>';
+            
+            for (let i = 1; i <= 6; i++) {
+                html += `<th>Group ${i}</th>`;
+            }
+            html += '</tr></thead><tbody>';
+            
+            timeSlots.forEach((slot, i) => {
+                html += `<tr><td>${slot}</td>`;
+                for (let g = 1; g <= 6; g++) {
+                    const demoId = schedule[g][i];
+                    const demo = demos.find(d => d.id === demoId);
+                    const isCompleted = app.groupProgress[g]?.completedDemos?.includes(demoId);
+                    const isCurrent = app.groupProgress[g]?.currentDemo === i;
+                    
+                    html += `<td>
+                        <span class="building-tag ${demo.building.toLowerCase()}">${demo.building}</span> 
+                        ${demo.name}
+                        ${isCompleted ? '✓' : ''}
+                        ${isCurrent && !isCompleted ? '◉' : ''}
+                    </td>`;
+                }
+                html += '</tr>';
+                
+                // Add break rows
+                if (i < timeSlots.length - 1) {
+                    const breakTime = i === 2 ? '10 min transition' : '5 min break';
+                    html += `<tr><td colspan="7" style="background: #fff8e0; text-align: center; font-style: italic;">${breakTime}</td></tr>`;
+                }
+            });
+            
+            html += '</tbody></table></div></div>';
+            contentDiv.innerHTML = html;
+        }
+
+        function checkIn(demoId) {
+            // Check if demo is already occupied
+            if (app.demoStatus[demoId]?.occupiedBy) {
+                notify('This demo is already occupied!', 'error');
+                return;
+            }
+            
+            // Initialize demo status if not exists
+            if (!app.demoStatus[demoId]) {
+                app.demoStatus[demoId] = {};
+            }
+            
+            // Mark as occupied by this group
+            app.demoStatus[demoId].occupiedBy = app.group;
+            app.demoStatus[demoId].isLate = false;
+            
+            saveData();
+            showDemos();
+            notify('Checked in successfully!');
+        }
+
+        function checkOut(demoId) {
+            // Clear occupation
+            app.demoStatus[demoId].occupiedBy = null;
+            app.demoStatus[demoId].isLate = false;
+            
+            // Mark as completed for this group
+            if (!app.groupProgress[app.group].completedDemos.includes(demoId)) {
+                app.groupProgress[app.group].completedDemos.push(demoId);
+            }
+            
+            // Move to next demo
+            if (app.groupProgress[app.group].currentDemo < 5) {
+                app.groupProgress[app.group].currentDemo++;
+            }
+            
+            saveData();
+            showDemos();
+            notify('Checked out successfully! Moving to next demo.');
+        }
+
+        function markLate(demoId) {
+            if (app.demoStatus[demoId]) {
+                app.demoStatus[demoId].isLate = !app.demoStatus[demoId].isLate;
+                saveData();
+                showDemos();
+                notify(app.demoStatus[demoId].isLate ? 'Marked as running late' : 'Marked as on time');
+            }
+        }
+
+        function sendBroadcast() {
+            const msg = document.getElementById('broadcastMsg').value;
+            if (msg) {
+                // Store broadcast in localStorage with timestamp
+                const broadcasts = JSON.parse(localStorage.getItem('broadcasts') || '[]');
+                broadcasts.push({
+                    message: msg,
+                    timestamp: new Date().toISOString(),
+                    from: 'Admin'
+                });
+                localStorage.setItem('broadcasts', JSON.stringify(broadcasts));
+                
+                notify('📢 Broadcast sent: ' + msg);
+                document.getElementById('broadcastMsg').value = '';
+                
+                // Show to all users
+                setTimeout(() => {
+                    checkForBroadcasts();
+                }, 1000);
+            }
+        }
+
+        function checkForBroadcasts() {
+            const broadcasts = JSON.parse(localStorage.getItem('broadcasts') || '[]');
+            const lastCheck = localStorage.getItem('lastBroadcastCheck') || '0';
+            const newBroadcasts = broadcasts.filter(b => new Date(b.timestamp) > new Date(lastCheck));
+            
+            if (newBroadcasts.length > 0) {
+                newBroadcasts.forEach(b => {
+                    notify('📢 ' + b.message);
+                });
+                localStorage.setItem('lastBroadcastCheck', new Date().toISOString());
+            }
+        }
+
+        function notify(message, type = 'success') {
+            const notif = document.createElement('div');
+            notif.className = 'notification';
+            if (type === 'error') {
+                notif.style.background = '#f44336';
+            }
+            notif.textContent = message;
+            document.body.appendChild(notif);
+            setTimeout(() => notif.remove(), 4000);
+        }
+
+        function saveData() {
+            localStorage.setItem('eventApp', JSON.stringify({
+                demoStatus: app.demoStatus,
+                groupProgress: app.groupProgress
+            }));
+        }
+
+        function updateData() {
+            const saved = localStorage.getItem('eventApp');
+            if (saved) {
+                const data = JSON.parse(saved);
+                app.demoStatus = data.demoStatus || {};
+                app.groupProgress = data.groupProgress || {};
+            }
+            
+            // Check for new broadcasts
+            checkForBroadcasts();
+            
+            // Refresh current view
+            const activeTab = document.querySelector('.tab.active');
+            if (activeTab) activeTab.click();
+        }
+    </script>
+</body>
+</html>
