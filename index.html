@@ -251,6 +251,12 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
 
+        .scrollable-wrapper {
+            overflow-x: auto;
+            max-width: 100%;
+            padding-bottom: 10px;
+        }
+
         .schedule-table {
             width: 100%;
             background: white;
@@ -355,6 +361,12 @@
         .hidden {
             display: none;
         }
+
+        .loading-indicator {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
     </style>
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -449,7 +461,8 @@
             group: null,
             demoStatus: {},
             groupProgress: {},
-            listeners: [] // Store Firebase listeners
+            listeners: [], // Store Firebase listeners
+            dataLoaded: false // Track if initial data is loaded
         };
 
         // Firebase listeners setup
@@ -473,17 +486,20 @@
                 const data = snapshot.val() || {};
                 appState.groupProgress = data;
                 
-                // Initialize current group progress if not exists
-                if (appState.group && !appState.groupProgress[appState.group]) {
+                // Mark data as loaded
+                appState.dataLoaded = true;
+                
+                // Only create default progress if this group has NEVER had any progress in Firebase
+                if (appState.group && !snapshot.child(String(appState.group)).exists()) {
+                    console.log(`Creating initial progress for Group ${appState.group}`);
                     appState.groupProgress[appState.group] = {
                         currentDemo: 0,
                         completedDemos: []
                     };
                     saveGroupProgress();
-                } else {
-                    // Update UI after loading progress
-                    updateUI();
                 }
+                
+                updateUI();
             });
             appState.listeners.push(() => groupProgressRef.off('value', groupProgressListener));
 
@@ -577,27 +593,32 @@
 
         function showDemos() {
             const contentDiv = document.getElementById('content');
+            
+            // Show loading indicator if data hasn't loaded yet
+            if (!appState.dataLoaded) {
+                contentDiv.innerHTML = '<div class="content active"><div class="loading-indicator">Loading your progress...</div></div>';
+                return;
+            }
+            
             let html = '<div class="content active">';
             
-            // Progress indicator
+            // Get current progress - DO NOT create default if it doesn't exist
             let currentProgress = appState.groupProgress[appState.group];
+            
+            // Use temporary defaults for display only if progress doesn't exist
+            if (!currentProgress) {
+                currentProgress = {
+                    currentDemo: 0,
+                    completedDemos: []
+                };
+                // DO NOT save this to Firebase or appState - it's just for display
+            } else {
+                // Safely patch any missing fields
+                currentProgress.currentDemo = currentProgress.currentDemo ?? 0;
+                currentProgress.completedDemos = currentProgress.completedDemos ?? [];
+            }
 
-if (!currentProgress) {
-    currentProgress = {
-        currentDemo: 0,
-        completedDemos: []
-    };
-    // Set default in local state
-    appState.groupProgress[appState.group] = currentProgress;
-
-    // Optionally push it to Firebase as well
-    database.ref(`groupProgress/${appState.group}`).set(currentProgress);
-} else {
-    // Patch missing fields
-    currentProgress.currentDemo ??= 0;
-    currentProgress.completedDemos ??= [];
-}
-
+            // Progress indicator
             html += '<div class="progress-indicator">';
             for (let i = 0; i < 6; i++) {
                 const isCompleted = i < currentProgress.currentDemo;
@@ -719,21 +740,29 @@ if (!currentProgress) {
 
         function showSchedule() {
             const contentDiv = document.getElementById('content');
-            let html = '<div class="content active"><div class="schedule-table"><table><thead><tr><th>Time</th>';
-            
+
+            let html = `
+                <div class="content active">
+                    <div class="schedule-table" style="overflow-x: auto; max-width: 100%; padding-bottom: 10px;">
+                        <table class="demo-table" style="min-width: 900px; border-collapse: collapse; width: 100%;">
+                            <thead>
+                                <tr style="background-color: #5B7BFA; color: white;">
+                                    <th style="padding: 12px;">Time</th>`;
+
             for (let i = 1; i <= 6; i++) {
                 html += `<th>Group ${i}</th>`;
             }
-            html += '</tr></thead><tbody>';
-            
+
+            html += `</tr></thead><tbody>`;
+
             timeSlots.forEach((slot, i) => {
-                html += `<tr><td>${slot}</td>`;
+                html += `<tr><td style="padding: 12px;">${slot}</td>`;
                 for (let g = 1; g <= 6; g++) {
                     const demoId = schedule[g][i];
                     const demo = demos.find(d => d.id === demoId);
                     const isCompleted = appState.groupProgress[g]?.completedDemos?.includes(demoId);
                     const isCurrent = appState.groupProgress[g]?.currentDemo === i;
-                    
+
                     html += `<td>
                         <span class="building-tag ${demo.building.toLowerCase()}">${demo.building}</span> 
                         ${demo.name}
@@ -741,91 +770,91 @@ if (!currentProgress) {
                         ${isCurrent && !isCompleted ? '◉' : ''}
                     </td>`;
                 }
-                html += '</tr>';
-                
+                html += `</tr>`;
+
                 // Add break rows
                 if (i < timeSlots.length - 1) {
                     const breakTime = i === 2 ? '10 min transition' : '5 min break';
                     html += `<tr><td colspan="7" style="background: #fff8e0; text-align: center; font-style: italic;">${breakTime}</td></tr>`;
                 }
             });
-            
-            html += '</tbody></table></div></div>';
+
+            html += `</tbody></table></div></div>`;
             contentDiv.innerHTML = html;
         }
 
         function checkIn(demoId) {
-        // Update Firebase
-        database.ref(`demoStatus/${demoId}`).set({
-            occupiedBy: appState.group,
-            isLate: false,
-            timestamp: firebase.database.ServerValue.TIMESTAMP
-        }).then(() => {
-            // ✅ FIX: Update local appState immediately
-            appState.demoStatus[demoId] = {
+            // Update Firebase
+            database.ref(`demoStatus/${demoId}`).set({
                 occupiedBy: appState.group,
-                isLate: false
-            };
-            notify('Checked in successfully!');
-            showDemos(); // ✅ FIX: Immediately reflect change in UI
-        });
-    }
+                isLate: false,
+                timestamp: firebase.database.ServerValue.TIMESTAMP
+            }).then(() => {
+                // Update local appState immediately
+                appState.demoStatus[demoId] = {
+                    occupiedBy: appState.group,
+                    isLate: false
+                };
+                notify('Checked in successfully!');
+                showDemos(); // Immediately reflect change in UI
+            });
+        }
 
-    function checkOut(demoId) {
-    console.log("Check-Out clicked for demoId:", demoId);
+        function checkOut(demoId) {
+            console.log("Check-Out clicked for demoId:", demoId);
 
-    // Step 1: Clear Firebase
-    database.ref(`demoStatus/${demoId}`).remove()
-        .then(() => {
-            console.log(`✅ demoStatus/${demoId} removed from Firebase`);
-
-            // Step 2: Safely get current progress
-            let currentProgress = appState.groupProgress[appState.group];
-            if (!currentProgress) {
-                currentProgress = { currentDemo: 0, completedDemos: [] };
-            } else {
-                currentProgress.currentDemo ??= 0;
-                currentProgress.completedDemos ??= [];
-            }
-
-            // Step 3: Update group progress
-            if (!currentProgress.completedDemos.includes(demoId)) {
-                currentProgress.completedDemos.push(demoId);
-            }
-            if (currentProgress.currentDemo < 5) {
-                currentProgress.currentDemo++;
-            }
-
-            // Step 4: Save to Firebase
-            return database.ref(`groupProgress/${appState.group}`).set(currentProgress)
+            // Step 1: Clear Firebase
+            database.ref(`demoStatus/${demoId}`).remove()
                 .then(() => {
-                    appState.groupProgress[appState.group] = currentProgress;
-                    delete appState.demoStatus[demoId]; // Clean up local state
+                    console.log(`✅ demoStatus/${demoId} removed from Firebase`);
 
-                    notify('Checked out successfully! Moving to next demo.');
-                    showDemos();
+                    // Step 2: Safely get current progress
+                    let currentProgress = appState.groupProgress[appState.group];
+                    if (!currentProgress) {
+                        currentProgress = { currentDemo: 0, completedDemos: [] };
+                    } else {
+                        currentProgress.currentDemo ??= 0;
+                        currentProgress.completedDemos ??= [];
+                    }
+
+                    // Step 3: Update group progress
+                    if (!currentProgress.completedDemos.includes(demoId)) {
+                        currentProgress.completedDemos.push(demoId);
+                    }
+                    if (currentProgress.currentDemo < 5) {
+                        currentProgress.currentDemo++;
+                    }
+
+                    // Step 4: Save to Firebase
+                    return database.ref(`groupProgress/${appState.group}`).set(currentProgress)
+                        .then(() => {
+                            appState.groupProgress[appState.group] = currentProgress;
+                            delete appState.demoStatus[demoId]; // Clean up local state
+
+                            notify('Checked out successfully! Moving to next demo.');
+                            showDemos();
+                        });
+                })
+                .catch((error) => {
+                    console.error("❌ Check-Out failed:", error);
+                    notify("❌ Check-Out failed: " + error.message, 'error');
                 });
-        })
-        .catch((error) => {
-            console.error("❌ Check-Out failed:", error);
-            notify("❌ Check-Out failed: " + error.message, 'error');
-        });
-}
+        }
 
-    function markLate(demoId) {
-        const currentStatus = appState.demoStatus[demoId] || {};
-        const newStatus = !currentStatus.isLate;
+        function markLate(demoId) {
+            const currentStatus = appState.demoStatus[demoId] || {};
+            const newStatus = !currentStatus.isLate;
 
-        database.ref(`demoStatus/${demoId}/isLate`).set(newStatus).then(() => {
-            // ✅ FIX: Update local state and refresh immediately
-            if (!appState.demoStatus[demoId]) {
-                appState.demoStatus[demoId] = {};
-            }
-            appState.demoStatus[demoId].isLate = newStatus;
-            notify(newStatus ? 'Marked as running late' : 'Marked as on time');
-            showDemos(); // ✅ FIX: Immediate refresh
-        });
-    }
+            database.ref(`demoStatus/${demoId}/isLate`).set(newStatus).then(() => {
+                // Update local state and refresh immediately
+                if (!appState.demoStatus[demoId]) {
+                    appState.demoStatus[demoId] = {};
+                }
+                appState.demoStatus[demoId].isLate = newStatus;
+                notify(newStatus ? 'Marked as running late' : 'Marked as on time');
+                showDemos(); // Immediate refresh
+            });
+        }
 
         function sendBroadcast() {
             const msg = document.getElementById('broadcastMsg').value;
