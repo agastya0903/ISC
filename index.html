@@ -199,7 +199,7 @@
             margin-right: 5px;
         }
 
-        .b1 {
+        .b1, .btg {
             background: #e3f2fd;
             color: #1976d2;
         }
@@ -372,6 +372,106 @@
             padding: 20px;
             color: #666;
         }
+
+        /* Chat/Messages Styles */
+        .chat-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 250px);
+            max-height: 600px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .message {
+            max-width: 70%;
+            padding: 10px 15px;
+            border-radius: 15px;
+            position: relative;
+        }
+
+        .message.own {
+            align-self: flex-end;
+            background: #667eea;
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+
+        .message.other {
+            align-self: flex-start;
+            background: #f0f0f0;
+            color: #333;
+            border-bottom-left-radius: 5px;
+        }
+
+        .message-header {
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            opacity: 0.8;
+        }
+
+        .message-text {
+            font-size: 14px;
+            word-wrap: break-word;
+        }
+
+        .message-time {
+            font-size: 11px;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+
+        .chat-input-container {
+            padding: 15px;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 10px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .chat-input:focus {
+            border-color: #667eea;
+        }
+
+        .send-btn {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .send-btn:hover {
+            background: #5a67d8;
+        }
+
+        .empty-messages {
+            text-align: center;
+            color: #999;
+            padding: 40px;
+        }
     </style>
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -466,6 +566,7 @@
             group: null,
             demoStatus: {},
             groupProgress: {},
+            messages: [],
             listeners: [], // Store Firebase listeners
             dataLoaded: false // Track if initial data is loaded
         };
@@ -508,6 +609,18 @@
             });
             appState.listeners.push(() => groupProgressRef.off('value', groupProgressListener));
 
+            // Listen to messages
+            const messagesRef = database.ref('messages');
+            const messagesListener = messagesRef.orderByChild('timestamp').on('value', (snapshot) => {
+                const messages = [];
+                snapshot.forEach((child) => {
+                    messages.push({ id: child.key, ...child.val() });
+                });
+                appState.messages = messages;
+                updateMessagesUI();
+            });
+            appState.listeners.push(() => messagesRef.off('value', messagesListener));
+
             // Show sync indicator
             document.getElementById('syncIndicator').style.display = 'flex';
         }
@@ -518,7 +631,19 @@
             
             const activeTab = document.querySelector('.tab.active');
             if (activeTab) {
+                const tabIndex = Array.from(activeTab.parentNode.children).indexOf(activeTab);
+                // Don't refresh if we're on the messages tab
+                if (appState.role === 'lead' && tabIndex === 2) return;
+                if (appState.role !== 'lead' && tabIndex === 1) return;
+                
                 activeTab.click();
+            }
+        }
+
+        function updateMessagesUI() {
+            const activeTab = document.querySelector('.tab.active');
+            if (activeTab && activeTab.textContent === 'Messages') {
+                showMessages();
             }
         }
 
@@ -562,10 +687,10 @@
         function createTabs() {
             const tabsDiv = document.getElementById('tabs');
             const tabs = appState.role === 'lead' ? 
-                ['My Demos', 'Schedule'] :
+                ['My Demos', 'Schedule', 'Messages'] :
                 appState.role === 'admin' ?
-                ['Dashboard', 'Broadcast', 'Schedule'] :
-                ['Dashboard', 'Schedule'];
+                ['Dashboard', 'Messages', 'Schedule'] :
+                ['Dashboard', 'Messages', 'Schedule'];
 
             tabs.forEach((tab, i) => {
                 const btn = document.createElement('button');
@@ -585,13 +710,11 @@
             // Show content
             if (appState.role === 'lead') {
                 if (index === 0) showDemos();
-                else showSchedule();
-            } else if (appState.role === 'admin') {
-                if (index === 0) showDashboard();
-                else if (index === 1) showBroadcast();
-                else showSchedule();
+                else if (index === 1) showSchedule();
+                else showMessages();
             } else {
                 if (index === 0) showDashboard();
+                else if (index === 1) showMessages();
                 else showSchedule();
             }
         }
@@ -734,17 +857,54 @@
             contentDiv.innerHTML = html;
         }
 
-        function showBroadcast() {
+        function showMessages() {
             const contentDiv = document.getElementById('content');
-            contentDiv.innerHTML = `
+            let html = `
                 <div class="content active">
-                    <div style="background: white; padding: 20px; border-radius: 10px;">
-                        <h3>Send Broadcast</h3>
-                        <input type="text" id="broadcastMsg" style="width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px;" placeholder="Type message...">
-                        <button class="btn btn-blue" onclick="sendBroadcast()">Send to All Group Leads</button>
+                    <div class="chat-container">
+                        <div class="chat-messages" id="chatMessages">
+            `;
+            
+            if (appState.messages.length === 0) {
+                html += '<div class="empty-messages">No messages yet. Start the conversation!</div>';
+            } else {
+                appState.messages.forEach(msg => {
+                    const isOwn = msg.from === appState.currentUser;
+                    const messageTime = new Date(msg.timestamp).toLocaleTimeString('en-US', { 
+                        hour: 'numeric', 
+                        minute: '2-digit',
+                        hour12: true 
+                    });
+                    
+                    html += `
+                        <div class="message ${isOwn ? 'own' : 'other'}">
+                            ${!isOwn ? `<div class="message-header">${msg.from}</div>` : ''}
+                            <div class="message-text">${msg.message}</div>
+                            <div class="message-time">${messageTime}</div>
+                        </div>
+                    `;
+                });
+            }
+            
+            html += `
+                        </div>
+                        <div class="chat-input-container">
+                            <input type="text" class="chat-input" id="messageInput" placeholder="Type a message..." onkeypress="handleMessageKeypress(event)">
+                            <button class="send-btn" onclick="sendMessage()">Send</button>
+                        </div>
                     </div>
                 </div>
             `;
+            
+            contentDiv.innerHTML = html;
+            
+            // Scroll to bottom
+            setTimeout(() => {
+                const chatMessages = document.getElementById('chatMessages');
+                if (chatMessages) {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            }, 100);
         }
 
         function showSchedule() {
@@ -865,34 +1025,37 @@
             });
         }
 
-        function sendBroadcast() {
-            const msg = document.getElementById('broadcastMsg').value;
-            if (msg) {
-                // Send broadcast to Firebase
-                database.ref('broadcasts').push({
-                    message: msg,
-                    timestamp: firebase.database.ServerValue.TIMESTAMP,
-                    from: 'Admin'
-                });
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (message) {
+                // Determine the sender name
+                const sender = appState.role === 'lead' ? 
+                    `Group ${appState.group} Lead` : 
+                    appState.role === 'admin' ? 'Admin' : 'Coordinator';
                 
-                document.getElementById('broadcastMsg').value = '';
-                notify('Broadcast sent!');
+                // Store the current user for message comparison
+                appState.currentUser = sender;
+                
+                // Send message to Firebase
+                database.ref('messages').push({
+                    message: message,
+                    from: sender,
+                    timestamp: firebase.database.ServerValue.TIMESTAMP
+                }).then(() => {
+                    input.value = '';
+                }).catch((error) => {
+                    notify('Failed to send message', 'error');
+                    console.error(error);
+                });
             }
         }
 
-        // Listen for broadcasts
-        function setupBroadcastListener() {
-            const broadcastRef = database.ref('broadcasts');
-            let isFirstLoad = true;
-            
-            broadcastRef.orderByChild('timestamp').limitToLast(1).on('child_added', (snapshot) => {
-                const broadcast = snapshot.val();
-                // Skip initial load and only show new messages
-                if (!isFirstLoad && broadcast) {
-                    notify('📢 ' + broadcast.message);
-                }
-                isFirstLoad = false;
-            });
+        function handleMessageKeypress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
         }
 
         function saveGroupProgress() {
@@ -910,6 +1073,7 @@
                 // Reset app state but keep the data
                 appState.role = null;
                 appState.group = null;
+                appState.currentUser = null;
                 // Don't reset demoStatus and groupProgress - they should persist
                 
                 // Hide sync indicator
@@ -937,8 +1101,17 @@
             setTimeout(() => notif.remove(), 4000);
         }
 
-        // Initialize broadcast listener when app starts
-        setupBroadcastListener();
-        </script>
-    </body>
-    </html>
+        // Initialize when page loads
+        window.onload = function() {
+            // Set initial current user based on role
+            if (appState.role === 'lead' && appState.group) {
+                appState.currentUser = `Group ${appState.group} Lead`;
+            } else if (appState.role === 'admin') {
+                appState.currentUser = 'Admin';
+            } else if (appState.role === 'coordinator') {
+                appState.currentUser = 'Coordinator';
+            }
+        };
+    </script>
+</body>
+</html>
