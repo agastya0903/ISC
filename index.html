@@ -175,6 +175,11 @@
             background: #ffebee;
         }
 
+        .demo-card.occupied.late {
+            border-left-color: #ff9800;
+            background: #fff8e0;
+        }
+
         .demo-info {
             margin-bottom: 10px;
         }
@@ -642,7 +647,10 @@
                 let cardClass = 'demo-card';
                 if (isCompleted) cardClass += ' completed';
                 else if (isCurrent && !isOccupied) cardClass += ' active';
-                else if (isOccupied) cardClass += ' occupied';
+                else if (isOccupied) {
+                    cardClass += ' occupied';
+                    if (isLate) cardClass += ' late';
+                }
                 if (isLate && isCheckedIn) cardClass += ' late';
                 
                 html += `
@@ -652,6 +660,7 @@
                             ${isCompleted ? '<span class="status-badge status-completed">Completed</span>' : ''}
                             ${isOccupied && !isCompleted ? `<span class="status-badge status-occupied">Occupied by Group ${demoStatusInfo.occupiedBy}</span>` : ''}
                             ${isLate && isCheckedIn ? '<span class="status-badge status-late">Running Late</span>' : ''}
+                            ${isOccupied && isLate && !isCompleted && !isCheckedIn ? '<span class="status-badge status-late">Running Late</span>' : ''}
                         </div>
                         <div class="demo-info">
                             <span class="building-tag ${demo.building.toLowerCase()}">${demo.building}</span>
@@ -662,7 +671,7 @@
                 // Show buttons only for current demo
                 if (isCurrent && !isCompleted) {
                     if (isOccupied) {
-                        html += '<div class="error-msg">This demo is currently occupied by another group</div>';
+                        html += `<div class="error-msg">This demo is currently occupied by another group${isLate ? ' and is running late' : ''}</div>`;
                     } else if (isCheckedIn) {
                         html += `
                             <div class="button-group">
@@ -930,6 +939,6 @@
 
         // Initialize broadcast listener when app starts
         setupBroadcastListener();
-    </script>
-</body>
-</html>
+        </script>
+    </body>
+    </html>
