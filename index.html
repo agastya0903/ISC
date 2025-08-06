@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -95,6 +96,16 @@
             color: #333;
         }
 
+        .btn-purple {
+            background: #9c27b0;
+            color: white;
+        }
+
+        .btn-gray {
+            background: #757575;
+            color: white;
+        }
+
         .btn:hover:not(:disabled) {
             opacity: 0.9;
             transform: translateY(-2px);
@@ -121,6 +132,7 @@
             overflow: hidden;
             margin-bottom: 20px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            position: relative;
         }
 
         .tab {
@@ -131,11 +143,35 @@
             border: none;
             background: white;
             transition: all 0.3s;
+            position: relative;
         }
 
         .tab.active {
             background: #667eea;
             color: white;
+        }
+
+        .tab .notification-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #f44336;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
         }
 
         .content {
@@ -334,12 +370,6 @@
             animation: pulse 2s infinite;
         }
 
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.3; }
-            100% { opacity: 1; }
-        }
-
         .progress-indicator {
             display: flex;
             gap: 5px;
@@ -472,6 +502,40 @@
             color: #999;
             padding: 40px;
         }
+
+        .reset-section {
+            background: #fff3e0;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border: 2px solid #ff9800;
+        }
+
+        .reset-section h4 {
+            color: #ff6f00;
+            margin-bottom: 10px;
+        }
+
+        .admin-controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border: 2px solid #f44336;
+        }
+
+        .admin-controls h3 {
+            color: #f44336;
+            margin-bottom: 15px;
+        }
+
+        .danger-zone {
+            background: #ffebee;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
     </style>
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -568,7 +632,10 @@
             groupProgress: {},
             messages: [],
             listeners: [], // Store Firebase listeners
-            dataLoaded: false // Track if initial data is loaded
+            dataLoaded: false, // Track if initial data is loaded
+            unreadMessages: 0, // Track unread messages
+            lastMessageCount: 0, // Track last message count
+            lastResetDemo: null // Track last action for reset capability
         };
 
         // Firebase listeners setup
@@ -616,6 +683,26 @@
                 snapshot.forEach((child) => {
                     messages.push({ id: child.key, ...child.val() });
                 });
+                
+                // Check for new messages
+                if (messages.length > appState.lastMessageCount) {
+                    const newMessageCount = messages.length - appState.lastMessageCount;
+                    const latestMessages = messages.slice(-newMessageCount);
+                    
+                    // Check if any new messages are from others
+                    const newMessagesFromOthers = latestMessages.filter(msg => msg.from !== appState.currentUser);
+                    
+                    if (newMessagesFromOthers.length > 0 && !isMessagesTabActive()) {
+                        appState.unreadMessages += newMessagesFromOthers.length;
+                        updateMessageNotificationBadge();
+                        
+                        // Show temporary notification
+                        const lastMessage = newMessagesFromOthers[newMessagesFromOthers.length - 1];
+                        notify(`New message from ${lastMessage.from}`, 'info');
+                    }
+                }
+                
+                appState.lastMessageCount = messages.length;
                 appState.messages = messages;
                 updateMessagesUI();
             });
@@ -623,6 +710,35 @@
 
             // Show sync indicator
             document.getElementById('syncIndicator').style.display = 'flex';
+        }
+
+        function isMessagesTabActive() {
+            const activeTab = document.querySelector('.tab.active');
+            return activeTab && activeTab.textContent === 'Messages';
+        }
+
+        function updateMessageNotificationBadge() {
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                if (tab.textContent === 'Messages') {
+                    if (appState.unreadMessages > 0) {
+                        // Check if badge already exists
+                        let badge = tab.querySelector('.notification-badge');
+                        if (!badge) {
+                            badge = document.createElement('span');
+                            badge.className = 'notification-badge';
+                            tab.appendChild(badge);
+                        }
+                        badge.textContent = appState.unreadMessages > 9 ? '9+' : appState.unreadMessages;
+                    } else {
+                        // Remove badge if no unread messages
+                        const badge = tab.querySelector('.notification-badge');
+                        if (badge) {
+                            badge.remove();
+                        }
+                    }
+                }
+            });
         }
 
         function updateUI() {
@@ -670,11 +786,12 @@
             document.getElementById('groupSelect').classList.add('hidden');
             document.getElementById('mainApp').classList.remove('hidden');
 
-            // Set user info
+            // Set user info and current user for messages
             const userInfo = appState.role === 'lead' ? 
                 `Group ${appState.group} Lead` : 
                 appState.role === 'admin' ? 'Admin' : 'Coordinator';
             document.getElementById('userInfo').textContent = userInfo;
+            appState.currentUser = userInfo;
 
             // Setup Firebase listeners
             setupFirebaseListeners();
@@ -699,6 +816,9 @@
                 btn.onclick = () => showTab(i);
                 tabsDiv.appendChild(btn);
             });
+
+            // Update notification badge after tabs are created
+            updateMessageNotificationBadge();
         }
 
         function showTab(index) {
@@ -706,6 +826,18 @@
             document.querySelectorAll('.tab').forEach((tab, i) => {
                 tab.classList.toggle('active', i === index);
             });
+
+            // Clear unread messages if Messages tab is opened
+            const tabs = appState.role === 'lead' ? 
+                ['My Demos', 'Schedule', 'Messages'] :
+                appState.role === 'admin' ?
+                ['Dashboard', 'Messages', 'Schedule'] :
+                ['Dashboard', 'Messages', 'Schedule'];
+            
+            if (tabs[index] === 'Messages') {
+                appState.unreadMessages = 0;
+                updateMessageNotificationBadge();
+            }
 
             // Show content
             if (appState.role === 'lead') {
@@ -807,6 +939,28 @@
                     }
                 }
                 
+                // Show reset option for recently completed demos (for Group Lead)
+                if (isCompleted && appState.lastResetDemo && appState.lastResetDemo.demoId === demoId) {
+                    html += `
+                        <div class="reset-section">
+                            <h4>⚠️ Recently Changed</h4>
+                            <p style="font-size: 14px; margin-bottom: 10px;">You can reset this demo if it was changed by mistake.</p>
+                            <button class="btn btn-gray" onclick="resetDemo(${demoId})">Reset Demo Status</button>
+                        </div>
+                    `;
+                }
+                
+                // Show reset option for recently checked in demos
+                if (isCheckedIn && appState.lastResetDemo && appState.lastResetDemo.demoId === demoId && appState.lastResetDemo.action === 'checkIn') {
+                    html += `
+                        <div class="reset-section">
+                            <h4>⚠️ Recently Checked In</h4>
+                            <p style="font-size: 14px; margin-bottom: 10px;">Reset if you checked in by mistake.</p>
+                            <button class="btn btn-gray" onclick="resetDemo(${demoId})">Reset Check-In</button>
+                        </div>
+                    `;
+                }
+                
                 html += '</div>';
             });
             
@@ -816,7 +970,22 @@
 
         function showDashboard() {
             const contentDiv = document.getElementById('content');
-            let html = '<div class="content active"><div class="status-grid">';
+            let html = '<div class="content active">';
+            
+            // Add Admin Controls if user is admin
+            if (appState.role === 'admin') {
+                html += `
+                    <div class="admin-controls">
+                        <h3>⚙️ Admin Controls</h3>
+                        <div class="danger-zone">
+                            <p style="margin-bottom: 10px;">Reset all demo statuses and group progress. This will clear all check-ins and progress for all groups.</p>
+                            <button class="btn btn-red" onclick="confirmResetAll()">🔄 Reset All System Data</button>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            html += '<div class="status-grid">';
             
             demos.forEach(demo => {
                 const demoStatus = appState.demoStatus[demo.id] || {};
@@ -964,6 +1133,14 @@
                     occupiedBy: appState.group,
                     isLate: false
                 };
+                
+                // Track for reset capability
+                appState.lastResetDemo = {
+                    demoId: demoId,
+                    action: 'checkIn',
+                    timestamp: Date.now()
+                };
+                
                 notify('Checked in successfully!');
                 showDemos(); // Immediately reflect change in UI
             });
@@ -1000,6 +1177,14 @@
                             appState.groupProgress[appState.group] = currentProgress;
                             delete appState.demoStatus[demoId]; // Clean up local state
 
+                            // Track for reset capability
+                            appState.lastResetDemo = {
+                                demoId: demoId,
+                                action: 'checkOut',
+                                previousDemo: currentProgress.currentDemo - 1,
+                                timestamp: Date.now()
+                            };
+
                             notify('Checked out successfully! Moving to next demo.');
                             showDemos();
                         });
@@ -1022,6 +1207,90 @@
                 appState.demoStatus[demoId].isLate = newStatus;
                 notify(newStatus ? 'Marked as running late' : 'Marked as on time');
                 showDemos(); // Immediate refresh
+            });
+        }
+
+        function resetDemo(demoId) {
+            if (!confirm('Are you sure you want to reset this demo? This will undo your last action.')) {
+                return;
+            }
+
+            const lastAction = appState.lastResetDemo;
+            
+            if (lastAction && lastAction.demoId === demoId) {
+                if (lastAction.action === 'checkIn') {
+                    // Reset a check-in (remove from demoStatus)
+                    database.ref(`demoStatus/${demoId}`).remove().then(() => {
+                        delete appState.demoStatus[demoId];
+                        appState.lastResetDemo = null;
+                        notify('Check-in reset successfully!');
+                        showDemos();
+                    });
+                } else if (lastAction.action === 'checkOut') {
+                    // Reset a check-out (remove from completed, decrement progress)
+                    let currentProgress = appState.groupProgress[appState.group];
+                    if (currentProgress) {
+                        // Remove from completed demos
+                        currentProgress.completedDemos = currentProgress.completedDemos.filter(id => id !== demoId);
+                        // Decrement current demo index
+                        if (currentProgress.currentDemo > 0) {
+                            currentProgress.currentDemo = lastAction.previousDemo || currentProgress.currentDemo - 1;
+                        }
+                        
+                        // Save to Firebase
+                        database.ref(`groupProgress/${appState.group}`).set(currentProgress).then(() => {
+                            appState.groupProgress[appState.group] = currentProgress;
+                            appState.lastResetDemo = null;
+                            notify('Check-out reset successfully!');
+                            showDemos();
+                        });
+                    }
+                }
+            }
+        }
+
+        function confirmResetAll() {
+            const confirmMessage = `⚠️ WARNING: This will reset ALL data for ALL groups!\n\nThis action will:\n• Clear all demo check-ins\n• Reset all group progress to zero\n• Remove all completed demo records\n\nAre you absolutely sure you want to continue?`;
+            
+            if (confirm(confirmMessage)) {
+                if (confirm('This action cannot be undone. Please confirm once more to proceed with the system reset.')) {
+                    resetAllSystem();
+                }
+            }
+        }
+
+        function resetAllSystem() {
+            // Show loading notification
+            notify('Resetting system...', 'info');
+            
+            // Clear all demo statuses
+            database.ref('demoStatus').remove().then(() => {
+                console.log('Demo statuses cleared');
+                
+                // Clear all group progress
+                return database.ref('groupProgress').remove();
+            }).then(() => {
+                console.log('Group progress cleared');
+                
+                // Reset local state
+                appState.demoStatus = {};
+                appState.groupProgress = {};
+                appState.lastResetDemo = null;
+                
+                // If the current user is a group lead, recreate their initial progress
+                if (appState.group) {
+                    appState.groupProgress[appState.group] = {
+                        currentDemo: 0,
+                        completedDemos: []
+                    };
+                    saveGroupProgress();
+                }
+                
+                notify('✅ System reset complete! All data has been cleared.', 'success');
+                showDashboard();
+            }).catch((error) => {
+                console.error('Reset failed:', error);
+                notify('❌ Reset failed: ' + error.message, 'error');
             });
         }
 
@@ -1074,6 +1343,9 @@
                 appState.role = null;
                 appState.group = null;
                 appState.currentUser = null;
+                appState.unreadMessages = 0;
+                appState.lastMessageCount = 0;
+                appState.lastResetDemo = null;
                 // Don't reset demoStatus and groupProgress - they should persist
                 
                 // Hide sync indicator
@@ -1095,6 +1367,8 @@
             notif.className = 'notification';
             if (type === 'error') {
                 notif.style.background = '#f44336';
+            } else if (type === 'info') {
+                notif.style.background = '#2196F3';
             }
             notif.textContent = message;
             document.body.appendChild(notif);
